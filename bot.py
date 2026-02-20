@@ -7,7 +7,8 @@ from datetime import datetime
 # CONFIG RAILWAY
 # ==============================
 API_KEY = os.environ["API_KEY"]
-WEBHOOK = os.environ["WEBHOOK"]
+WEBHOOK_OUTOFGAME = os.environ["WEBHOOK_OUTOFGAME"]
+WEBHOOK_INGAME = os.environ["WEBHOOK_INGAME"]
 GAME_REGION = os.getenv("GAME_REGION", "europe")  # pour spectator/v5, correspond à la région (europe pour EUW)
 ACCOUNT_REGION = os.getenv("ACCOUNT_REGION", "europe")  # pour account/v1
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))
@@ -23,7 +24,7 @@ FRIEND_IDS = [fid.strip() for fid in FRIEND_IDS_ENV.split(",") if fid.strip()]
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
-def send_discord(title, desc, color=5814783):
+def send_discord_outofgame(title, desc, color=5814783):
     content = DISCORD_MENTION if DISCORD_MENTION else ""
     data = {
         "content": content,
@@ -31,7 +32,19 @@ def send_discord(title, desc, color=5814783):
         "embeds": [{"title": title, "description": desc, "color": color}]
     }
     try:
-        requests.post(WEBHOOK, json=data, timeout=10)
+        requests.post(WEBHOOK_OUTOFGAME, json=data, timeout=10)
+    except Exception as e:
+        log(f"Erreur Discord: {e}")
+        
+def send_discord_ingame(title, desc, color=5814783):
+    content = DISCORD_MENTION if DISCORD_MENTION else ""
+    data = {
+        "content": content,
+        "allowed_mentions": {"parse": ["users", "roles"]},
+        "embeds": [{"title": title, "description": desc, "color": color}]
+    }
+    try:
+        requests.post(WEBHOOK_INGAME, json=data, timeout=10)
     except Exception as e:
         log(f"Erreur Discord: {e}")
 
@@ -96,7 +109,7 @@ while True:
             if not in_game[riot_id]:
                 in_game[riot_id] = True
                 log(f"{riot_id} EN GAME")
-                send_discord(
+                send_discord_ingame(
                     f"🎮 {riot_id} vient de lancer une game",
                     f"",
                     5763719
@@ -105,7 +118,7 @@ while True:
             if in_game[riot_id]:
                 in_game[riot_id] = False
                 log(f"{riot_id} plus en game")
-                send_discord(
+                send_discord_outofgame(
                     f"🏁 Partie terminée pour {riot_id}",
                     f"",
                     15548997
@@ -113,7 +126,7 @@ while True:
             else:
                 # Log pour dire que le joueur n'est pas en game
                 log(f"{riot_id} n'est pas en game")
-                send_discord(
+                send_discord_outofgame(
                     f"ℹ️ {riot_id} n'est pas en game",
                     f"",
                     15105570
