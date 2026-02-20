@@ -58,20 +58,28 @@ def get_summoner_id(riot_id):
     r = riot_get(url_account)
 
     if r.status_code != 200:
-        log(f"Erreur PUUID {riot_id}: {r.status_code}")
+        log(f"Erreur PUUID {riot_id}: {r.status_code} / {r.text}")
         return None
 
-    puuid = r.json()["puuid"]
+    puuid = r.json().get("puuid")
+    if not puuid:
+        log(f"Erreur PUUID: 'puuid' absent pour {riot_id} / {r.text}")
+        return None
 
     # PUUID → SUMMONER_ID
     url_summoner = f"https://{GAME_REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"
     r = riot_get(url_summoner)
 
     if r.status_code != 200:
-        log(f"Erreur SUMMONER_ID {riot_id}: {r.status_code}")
+        log(f"Erreur SUMMONER_ID {riot_id}: {r.status_code} / {r.text}")
         return None
 
-    return r.json()["id"]
+    summoner_id = r.json().get("id")
+    if not summoner_id:
+        log(f"Erreur SUMMONER_ID: 'id' absent pour {riot_id} / {r.text}")
+        return None
+
+    return summoner_id
 
 # ==============================
 # INITIALISATION
