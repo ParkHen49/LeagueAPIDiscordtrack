@@ -8,8 +8,9 @@ from datetime import datetime
 # ==============================
 API_KEY = os.environ["API_KEY"]
 WEBHOOK = os.environ["WEBHOOK"]
-GAME_REGION = os.getenv("GAME_REGION", "euw1")  # serveur des joueurs
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "120"))
+GAME_REGION = os.getenv("GAME_REGION", "euw1")  # serveur du joueur
+ACCOUNT_REGION = os.getenv("ACCOUNT_REGION", "europe")  # pour account API
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))
 
 # Liste des amis à suivre (summonerId) séparés par des virgules
 FRIEND_IDS_ENV = os.environ.get("FRIEND_IDS", "")
@@ -32,6 +33,24 @@ def riot_get(url):
     headers = {"X-Riot-Token": API_KEY}
     return requests.get(url, headers=headers, timeout=10)
 
+def get_account_info(riot_id):
+    """Récupère les infos publiques via account/v1 API"""
+    try:
+        game_name, tag = riot_id.split("#")
+    except:
+        log(f"Format RiotID invalide: {riot_id}")
+        return None
+
+    url = f"https://{ACCOUNT_REGION}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag}"
+    r = riot_get(url)
+    if r.status_code == 200:
+        data = r.json()
+        log(f"Infos compte {riot_id} : puuid={data.get('puuid')}, gameName={data.get('gameName')}, tagLine={data.get('tagLine')}, level={data.get('summonerLevel','N/A')}")
+        return data
+    else:
+        log(f"Impossible de récupérer infos {riot_id}: {r.status_code} / {r.text}")
+        return None
+
 # ==============================
 # INITIALISATION
 # ==============================
@@ -43,6 +62,10 @@ if not FRIEND_IDS:
 
 in_game = {fid: False for fid in FRIEND_IDS}
 
+# Affichage infos comptes amis
+for fid in FRIEND_IDS:
+    get_account_info(fid)  # affiche dans logs
+
 log(f"Bot démarré pour {len(FRIEND_IDS)} amis.")
 
 # ==============================
@@ -50,7 +73,7 @@ log(f"Bot démarré pour {len(FRIEND_IDS)} amis.")
 # ==============================
 while True:
     for fid in FRIEND_IDS:
-        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{fid}"
+        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v4/active-games/by-summoner/{fid}"
         r = riot_get(url)
 
         if r.status_code == 200:
@@ -62,7 +85,6 @@ while True:
                     f"SummonerId: {fid} est en jeu 👀",
                     5763719
                 )
-
         elif r.status_code == 404:
             if in_game[fid]:
                 in_game[fid] = False
@@ -72,14 +94,14 @@ while True:
                     f"SummonerId: {fid} a terminé sa game",
                     15548997
                 )
-
+            else:
+                # Nouveau log pour dire que le joueur n'est pas en game
+                log(f"{fid} n'est pas en game")
         elif r.status_code == 403:
             log("⚠️ 403 — Clé API invalide, expirée ou serveur incorrect")
-
         elif r.status_code == 429:
             log("⚠️ Rate limit atteint — pause 2 minutes")
             time.sleep(120)
-
         else:
             log(f"Erreur API {fid}: {r.status_code}")
 
