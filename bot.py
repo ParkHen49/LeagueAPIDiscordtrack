@@ -111,7 +111,7 @@ while True:
                 log(f"{riot_id} EN GAME")
                 send_discord_ingame(
                     f"🎮 {riot_id} vient de lancer une game",
-                    f"{r.gameMode} — {r.gameType}",
+                    f"",
                     5763719
                 )
         elif r.status_code == 404:
