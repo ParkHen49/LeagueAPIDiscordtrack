@@ -73,7 +73,7 @@ log(f"Bot démarré pour {len(FRIEND_IDS)} amis.")
 # ==============================
 while True:
     for fid in FRIEND_IDS:
-        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v4/active-games/by-summoner/{fid}"
+        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{fid}"
         r = riot_get(url)
 
         if r.status_code == 200:
