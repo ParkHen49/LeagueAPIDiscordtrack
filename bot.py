@@ -6,21 +6,18 @@ from datetime import datetime
 # ==============================
 # CONFIG RAILWAY
 # ==============================
-
 API_KEY = os.environ["API_KEY"]
 WEBHOOK = os.environ["WEBHOOK"]
+GAME_REGION = os.getenv("GAME_REGION", "euw1")  # serveur des joueurs
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "120"))
 
-GAME_REGION = os.getenv("GAME_REGION", "euw1")  # serveur du joueur
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))
-
-# Liste joueurs depuis Railway
-PLAYERS_ENV = os.environ.get("PLAYERS", "")
-PLAYERS = [p.strip() for p in PLAYERS_ENV.split(",") if p.strip()]
+# Liste des amis à suivre (summonerId) séparés par des virgules
+FRIEND_IDS_ENV = os.environ.get("FRIEND_IDS", "")
+FRIEND_IDS = [fid.strip() for fid in FRIEND_IDS_ENV.split(",") if fid.strip()]
 
 # ==============================
 # UTILS
 # ==============================
-
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -36,91 +33,54 @@ def riot_get(url):
     return requests.get(url, headers=headers, timeout=10)
 
 # ==============================
-# CONVERSION RiotID → SUMMONER_ID
-# ==============================
-
-def get_summoner_id(riot_id):
-    try:
-        game_name, tag = riot_id.split("#")
-    except:
-        log(f"Format RiotID invalide: {riot_id}")
-        return None
-
-    # Route officielle Riot pour récupérer directement SUMMONER_ID
-    url = f"https://{GAME_REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{game_name}"
-    r = riot_get(url)
-
-    if r.status_code != 200:
-        log(f"Erreur récupération SUMMONER_ID {riot_id}: {r.status_code} / {r.text}")
-        return None
-
-    summoner_data = r.json()
-    # vérifie que name et id correspondent
-    if "id" not in summoner_data:
-        log(f"'id' absent pour {riot_id} / {summoner_data}")
-        return None
-
-    return summoner_data["id"]
-
-# ==============================
 # INITIALISATION
 # ==============================
+log("Initialisation amis depuis Railway...")
 
-log("Initialisation joueurs depuis Railway...")
+if not FRIEND_IDS:
+    log("⚠️ Aucun summonerId trouvé dans FRIEND_IDS, arrête le bot.")
+    exit(1)
 
-SUMMONERS = {}
-for player in PLAYERS:
-    sid = get_summoner_id(player)
-    if sid:
-        SUMMONERS[player] = sid
-        log(f"{player} OK")
-    else:
-        log(f"{player} ignoré")
+in_game = {fid: False for fid in FRIEND_IDS}
 
-if not SUMMONERS:
-    log("⚠️ Aucun joueur valide trouvé — vérifie la variable PLAYERS")
-
-in_game = {player: False for player in SUMMONERS}
-
-log("Bot démarré")
+log(f"Bot démarré pour {len(FRIEND_IDS)} amis.")
 
 # ==============================
-# LOOP
+# LOOP PRINCIPALE
 # ==============================
-
 while True:
-    for player, summoner_id in SUMMONERS.items():
-        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v4/active-games/by-summoner/{summoner_id}"
+    for fid in FRIEND_IDS:
+        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{fid}"
         r = riot_get(url)
 
         if r.status_code == 200:
-            if not in_game[player]:
-                in_game[player] = True
-                log(f"{player} EN GAME")
+            if not in_game[fid]:
+                in_game[fid] = True
+                log(f"{fid} EN GAME")
                 send_discord(
-                    f"🎮 {player} vient de lancer une game",
-                    "Game détectée 👀",
+                    f"🎮 Un ami vient de lancer une game",
+                    f"SummonerId: {fid} est en jeu 👀",
                     5763719
                 )
 
         elif r.status_code == 404:
-            if in_game[player]:
-                in_game[player] = False
-                log(f"{player} plus en game")
+            if in_game[fid]:
+                in_game[fid] = False
+                log(f"{fid} plus en game")
                 send_discord(
-                    f"🏁 Game terminée pour {player}",
-                    "Fin de partie détectée.",
+                    f"🏁 Partie terminée",
+                    f"SummonerId: {fid} a terminé sa game",
                     15548997
                 )
 
         elif r.status_code == 403:
-            log("⚠️ 403 — Clé invalide, expirée ou serveur incorrect")
+            log("⚠️ 403 — Clé API invalide, expirée ou serveur incorrect")
 
         elif r.status_code == 429:
             log("⚠️ Rate limit atteint — pause 2 minutes")
             time.sleep(120)
 
         else:
-            log(f"Erreur API {player}: {r.status_code}")
+            log(f"Erreur API {fid}: {r.status_code}")
 
     time.sleep(CHECK_INTERVAL)
