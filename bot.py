@@ -128,7 +128,7 @@ while True:
                 log(f"{riot_id} n'est pas en game")
                 send_discord_outofgame(
                     f"ℹ️ {riot_id} n'est pas en game",
-                    f"{r.status_code} — {r.CurrentGameInfo.gameId}",
+                    f"{r.status_code} — {r.gameId}",
                     15105570
                 )
         elif r.status_code == 403:
