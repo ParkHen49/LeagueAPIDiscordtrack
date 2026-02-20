@@ -89,7 +89,7 @@ log(f"Bot démarré pour {len(PUUID_MAP)} joueurs.")
 # ==============================
 while True:
     for riot_id, puuid in PUUID_MAP.items():
-        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-puuid/{puuid}"
+        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
         r = riot_get(url)
 
         if r.status_code == 200:
