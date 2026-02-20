@@ -10,8 +10,7 @@ from datetime import datetime
 API_KEY = os.environ["API_KEY"]
 WEBHOOK = os.environ["WEBHOOK"]
 
-GAME_REGION = os.getenv("GAME_REGION", "euw1")
-ACCOUNT_REGION = os.getenv("ACCOUNT_REGION", "europe")
+GAME_REGION = os.getenv("GAME_REGION", "euw1")  # serveur du joueur
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))
 
 # Liste joueurs depuis Railway
@@ -26,13 +25,7 @@ def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 def send_discord(title, desc, color=5814783):
-    data = {
-        "embeds": [{
-            "title": title,
-            "description": desc,
-            "color": color
-        }]
-    }
+    data = {"embeds": [{"title": title, "description": desc, "color": color}]}
     try:
         requests.post(WEBHOOK, json=data, timeout=10)
     except Exception as e:
@@ -53,33 +46,21 @@ def get_summoner_id(riot_id):
         log(f"Format RiotID invalide: {riot_id}")
         return None
 
-    # RiotID → PUUID
-    url_account = f"https://{ACCOUNT_REGION}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag}"
-    r = riot_get(url_account)
+    # Route officielle Riot pour récupérer directement SUMMONER_ID
+    url = f"https://{GAME_REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-name/{game_name}"
+    r = riot_get(url)
 
     if r.status_code != 200:
-        log(f"Erreur PUUID {riot_id}: {r.status_code} / {r.text}")
+        log(f"Erreur récupération SUMMONER_ID {riot_id}: {r.status_code} / {r.text}")
         return None
 
-    puuid = r.json().get("puuid")
-    if not puuid:
-        log(f"Erreur PUUID: 'puuid' absent pour {riot_id} / {r.text}")
+    summoner_data = r.json()
+    # vérifie que name et id correspondent
+    if "id" not in summoner_data:
+        log(f"'id' absent pour {riot_id} / {summoner_data}")
         return None
 
-    # PUUID → SUMMONER_ID
-    url_summoner = f"https://{GAME_REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"
-    r = riot_get(url_summoner)
-
-    if r.status_code != 200:
-        log(f"Erreur SUMMONER_ID {riot_id}: {r.status_code} / {r.text}")
-        return None
-
-    summoner_id = r.json().get("id")
-    if not summoner_id:
-        log(f"Erreur SUMMONER_ID: 'id' absent pour {riot_id} / {r.text}")
-        return None
-
-    return summoner_id
+    return summoner_data["id"]
 
 # ==============================
 # INITIALISATION
@@ -109,7 +90,6 @@ log("Bot démarré")
 
 while True:
     for player, summoner_id in SUMMONERS.items():
-
         url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v4/active-games/by-summoner/{summoner_id}"
         r = riot_get(url)
 
@@ -134,7 +114,7 @@ while True:
                 )
 
         elif r.status_code == 403:
-            log("⚠️ 403 — Clé invalide, expirée ou région incorrecte")
+            log("⚠️ 403 — Clé invalide, expirée ou serveur incorrect")
 
         elif r.status_code == 429:
             log("⚠️ Rate limit atteint — pause 2 minutes")
