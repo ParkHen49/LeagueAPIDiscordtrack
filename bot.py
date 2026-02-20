@@ -98,7 +98,6 @@ while True:
                 log(f"{riot_id} EN GAME")
                 send_discord(
                     f"🎮 {riot_id} vient de lancer une game",
-                    f"{riot_id} est en jeu 👀",
                     5763719
                 )
         elif r.status_code == 404:
@@ -107,7 +106,6 @@ while True:
                 log(f"{riot_id} plus en game")
                 send_discord(
                     f"🏁 Partie terminée pour {riot_id}",
-                    f"{riot_id} a terminé sa game",
                     15548997
                 )
             else:
@@ -115,7 +113,6 @@ while True:
                 log(f"{riot_id} n'est pas en game")
                 send_discord(
                     f"ℹ️ {riot_id} n'est pas en game",
-                    f"{riot_id} est actuellement hors partie",
                     15548997
                 )
         elif r.status_code == 403:
