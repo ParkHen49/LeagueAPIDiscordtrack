@@ -118,7 +118,7 @@ while True:
             if in_game[riot_id]:
                 in_game[riot_id] = False
                 log(f"{riot_id} plus en game")
-                send_discord_outofgame(
+                send_discord_ingame(
                     f"🏁 Partie terminée pour {riot_id}",
                     f"",
                     15548997
