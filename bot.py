@@ -97,6 +97,11 @@ while True:
             else:
                 # Nouveau log pour dire que le joueur n'est pas en game
                 log(f"{fid} n'est pas en game")
+                send_discord(
+                    f"test totot 26",
+                    f"SummonerId: test toto 27",
+                    15548997
+                )
         elif r.status_code == 403:
             log("⚠️ 403 — Clé API invalide, expirée ou serveur incorrect")
         elif r.status_code == 429:
