@@ -8,11 +8,12 @@ from datetime import datetime
 # ==============================
 API_KEY = os.environ["API_KEY"]
 WEBHOOK = os.environ["WEBHOOK"]
-GAME_REGION = os.getenv("GAME_REGION", "euw1")  # serveur du joueur
-ACCOUNT_REGION = os.getenv("ACCOUNT_REGION", "europe")  # pour account API
+GAME_REGION = os.getenv("GAME_REGION", "europe")  # pour spectator/v5, correspond à la région (europe pour EUW)
+ACCOUNT_REGION = os.getenv("ACCOUNT_REGION", "europe")  # pour account/v1
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "60"))
+DISCORD_MENTION = os.getenv("DISCORD_MENTION", "")
 
-# Liste des amis à suivre (summonerId) séparés par des virgules
+# Liste des Riot IDs à suivre
 FRIEND_IDS_ENV = os.environ.get("FRIEND_IDS", "")
 FRIEND_IDS = [fid.strip() for fid in FRIEND_IDS_ENV.split(",") if fid.strip()]
 
@@ -23,7 +24,12 @@ def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 def send_discord(title, desc, color=5814783):
-    data = {"embeds": [{"title": title, "description": desc, "color": color}]}
+    content = DISCORD_MENTION if DISCORD_MENTION else ""
+    data = {
+        "content": content,
+        "allowed_mentions": {"parse": ["users", "roles"]},
+        "embeds": [{"title": title, "description": desc, "color": color}]
+    }
     try:
         requests.post(WEBHOOK, json=data, timeout=10)
     except Exception as e:
@@ -33,81 +39,91 @@ def riot_get(url):
     headers = {"X-Riot-Token": API_KEY}
     return requests.get(url, headers=headers, timeout=10)
 
-def get_account_info(riot_id):
-    """Récupère les infos publiques via account/v1 API"""
+def get_puuid(riot_id):
+    """Récupère le PUUID depuis RiotID#Tag"""
     try:
-        game_name, tag = riot_id.split("#")
+        name, tag = riot_id.split("#")
     except:
         log(f"Format RiotID invalide: {riot_id}")
         return None
 
-    url = f"https://{ACCOUNT_REGION}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag}"
+    url = f"https://{ACCOUNT_REGION}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{name}/{tag}"
     r = riot_get(url)
     if r.status_code == 200:
         data = r.json()
-        log(f"Infos compte {riot_id} : puuid={data.get('puuid')}, gameName={data.get('gameName')}, tagLine={data.get('tagLine')}, level={data.get('summonerLevel','N/A')}")
-        return data
+        puuid = data.get("puuid")
+        log(f"PUUID pour {riot_id} : {puuid}")
+        return puuid
     else:
-        log(f"Impossible de récupérer infos {riot_id}: {r.status_code} / {r.text}")
+        log(f"Impossible de récupérer PUUID {riot_id}: {r.status_code} / {r.text}")
         return None
 
 # ==============================
 # INITIALISATION
 # ==============================
-log("Initialisation amis depuis Railway...")
+log("Initialisation joueurs depuis Railway...")
 
 if not FRIEND_IDS:
-    log("⚠️ Aucun summonerId trouvé dans FRIEND_IDS, arrête le bot.")
+    log("⚠️ Aucun RiotID trouvé dans FRIEND_IDS, arrête le bot.")
     exit(1)
 
-in_game = {fid: False for fid in FRIEND_IDS}
+# Map RiotID → PUUID
+PUUID_MAP = {}
+for riot_id in FRIEND_IDS:
+    puuid = get_puuid(riot_id)
+    if puuid:
+        PUUID_MAP[riot_id] = puuid
+    else:
+        log(f"{riot_id} ignoré (PUUID non trouvé)")
 
-# Affichage infos comptes amis
-for fid in FRIEND_IDS:
-    get_account_info(fid)  # affiche dans logs
+if not PUUID_MAP:
+    log("⚠️ Aucun joueur valide trouvé, arrête le bot.")
+    exit(1)
 
-log(f"Bot démarré pour {len(FRIEND_IDS)} amis.")
+# Etat in_game
+in_game = {riot_id: False for riot_id in PUUID_MAP}
+log(f"Bot démarré pour {len(PUUID_MAP)} joueurs.")
 
 # ==============================
 # LOOP PRINCIPALE
 # ==============================
 while True:
-    for fid in FRIEND_IDS:
-        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{fid}"
+    for riot_id, puuid in PUUID_MAP.items():
+        url = f"https://{GAME_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-puuid/{puuid}"
         r = riot_get(url)
 
         if r.status_code == 200:
-            if not in_game[fid]:
-                in_game[fid] = True
-                log(f"{fid} EN GAME")
+            if not in_game[riot_id]:
+                in_game[riot_id] = True
+                log(f"{riot_id} EN GAME")
                 send_discord(
-                    f"🎮 Un ami vient de lancer une game",
-                    f"SummonerId: {fid} est en jeu 👀",
+                    f"🎮 {riot_id} vient de lancer une game",
+                    f"{riot_id} est en jeu 👀",
                     5763719
                 )
         elif r.status_code == 404:
-            if in_game[fid]:
-                in_game[fid] = False
-                log(f"{fid} plus en game")
+            if in_game[riot_id]:
+                in_game[riot_id] = False
+                log(f"{riot_id} plus en game")
                 send_discord(
-                    f"🏁 Partie terminée",
-                    f"SummonerId: {fid} a terminé sa game",
+                    f"🏁 Partie terminée pour {riot_id}",
+                    f"{riot_id} a terminé sa game",
                     15548997
                 )
             else:
-                # Nouveau log pour dire que le joueur n'est pas en game
-                log(f"{fid} n'est pas en game")
+                # Log pour dire que le joueur n'est pas en game
+                log(f"{riot_id} n'est pas en game")
                 send_discord(
-                    f"test totot 26",
-                    f"SummonerId: test toto 27",
+                    f"ℹ️ {riot_id} n'est pas en game",
+                    f"{riot_id} est actuellement hors partie",
                     15548997
                 )
         elif r.status_code == 403:
-            log("⚠️ 403 — Clé API invalide, expirée ou serveur incorrect")
+            log(f"⚠️ 403 clé API invalide/expirée pour {riot_id}")
         elif r.status_code == 429:
             log("⚠️ Rate limit atteint — pause 2 minutes")
             time.sleep(120)
         else:
-            log(f"Erreur API {fid}: {r.status_code}")
+            log(f"Erreur API {riot_id}: {r.status_code}")
 
     time.sleep(CHECK_INTERVAL)
